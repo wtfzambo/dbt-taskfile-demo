@@ -1,0 +1,106 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/alpine
+{
+  "name": "dbtTaskfileDemo",
+  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bookworm",
+
+  // set the name of the devcontainer
+  "runArgs": [
+    "--name",
+    "${localWorkspaceFolderBasename}_${localEnv:USER}${localEnv:USERNAME}_py312-bookworm-devcontainer"
+  ],
+
+  "features": {
+    "ghcr.io/devcontainers-contrib/features/go-task:1": {},
+    "ghcr.io/devcontainers-contrib/features/poetry:2": {},
+    "ghcr.io/eitsupi/devcontainer-features/duckdb-cli:1": {},
+    "ghcr.io/eitsupi/devcontainer-features/jq-likes:2": {
+      "yqVersion": "4.35.2"
+    }
+  },
+
+  // "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/workspace,type=bind",
+  // "workspaceFolder": "/home/vscode/workspace",
+  // "mounts": [
+  // 	"source=${localWorkspaceFolderBasename}-.venv,target=${containerWorkspaceFolder}/.venv,type=volume"
+  // ],
+
+  "postStartCommand": "bash ./.devcontainer/post-start.sh",
+  "waitFor": "postStartCommand",
+
+  // Configure tool-specific properties.
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "yzhang.markdown-all-in-one",
+        "innoverio.vscode-dbt-power-user",
+        "fayras.simple-new-file",
+        "vscode-icons-team.vscode-icons"
+      ],
+      "settings": {
+        "remote.restoreForwardedPorts": false,
+        "terminal.integrated.defaultProfile.linux": "zsh",
+				"terminal.integrated.profiles.linux": {
+					"zsh": {
+						"path": "zsh"
+					}
+				},
+        "python.defaultInterpreterPath": "./.venv/bin/python",
+        "python.terminal.activateEnvironment": false,
+        "python.interpreter.infoVisibility": "always",
+        "python.languageServer": "Default",
+        "python.analysis.typeCheckingMode": "off",
+        "workbench.iconTheme": "vscode-icons",
+        "task": { "checkForUpdates": false },
+        "yaml.schemas": {
+          "https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/dbt_yml_files.json": [
+            "/**/*.yml",
+            "!profiles.yml",
+            "!profiles.*.yml",
+            "!dbt_project.yml",
+            "!packages.yml",
+            "!selectors.yml",
+            "!profile_template.yml",
+            "!Task*.{yaml,yml}",
+            "!.piperider/**"
+          ],
+          "https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/dbt_project.json": [
+            "dbt_project.yml"
+          ],
+          "https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/selectors.json": [
+            "selectors.yml"
+          ],
+          "https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/packages.json": [
+            "packages.yml"
+          ]
+        },
+        "vsicons.associations.files": [
+          {
+            "icon": "taskfile",
+            "extensions": [],
+            "format": "svg",
+            "filename": true,
+            "filenamesGlob": ["Taskfile", "Taskfile.dist"],
+            "extensionsGlob": ["yml", "yaml"]
+          },
+          {
+            "icon": "db",
+            "extends": "db",
+            "format": "svg",
+            "extensions": ["duckdb"]
+          },
+          {
+            "icon": "jinja",
+            "extensions": [],
+            "format": "svg",
+            "overrides": "jinja"
+          }
+        ]
+      }
+    }
+  }
+}
