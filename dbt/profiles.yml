@@ -1,0 +1,6 @@
+demo:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: ../assets/demo.duckdb

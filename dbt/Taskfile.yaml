@@ -1,0 +1,410 @@
+version: 3
+
+env:
+  NC: \033[0m
+  BLACK: \033[0;30m
+  RED: \033[0;31m
+  GREEN: \033[0;32m
+  YELLOW: \033[0;33m
+  BLUE: \033[0;34m
+  PURPLE: \033[0;35m
+  CYAN: \033[0;36m
+  WHITE: \033[0;37m
+
+  IBLACK: \033[0;90m
+  IRED: \033[0;91m
+  IGREEN: \033[0;92m
+  IYELLOW: \033[0;93m
+  IBLUE: \033[0;94m
+  IPURPLE: \033[0;95m
+  ICYAN: \033[0;96m
+  IWHITE: \033[0;97m
+
+  TASK_FOLDER: .task
+  TEMP_DIR: '{{.TASK_FOLDER}}/tmp'
+  MODELS_DIR: models
+  BASE_LAYER: bronze
+  BASE_DIR: '{{.MODELS_DIR}}/{{.BASE_LAYER}}'
+  SOURCES_FILE: sources.yml
+
+  GENERATING_MODELS_YAML: ⌛ Generating models yaml...
+  GENERATING_SOURCES_YAML: ⌛ Generating source yaml...
+  GENERATING_MODELS_SQL: ⌛ Generating models sql...
+  FILE_CREATED_MSG: 🟢 Created {{.YELLOW}}%s{{.NC}} under directory {{.BLUE}}%s{{.NC}}
+  MISSING_VAR_WARNING: |
+    ❓ You forgot to specify the variable: %s
+    💡 Set it by passing `{{.IGREEN}}task{{.NC}} %s %s=my_value`
+  MISSING_ARGS_WARNING: |
+    ❓ You forgot to specify one or more models
+    💡 Set them by passing `{{.IGREEN}}task{{.NC}} %s -- my_model1 my_model2 ...`
+  FILE_NOT_FOUND: ❌ No file matching
+  FILE_NOT_FOUND_ERROR: >
+    {{.FILE_NOT_FOUND}} {{.YELLOW}}*%s.sql{{.NC}} found under {{.MODELS_DIR}}
+  DBT_ERROR: ❌ Error encountered while running dbt operation
+
+tasks:
+
+  build:
+    desc: Run all dbt models, tests, snapshots and seeds
+    aliases: [b]
+    silent: true
+    cmd: dbt build
+
+  run-model:
+    desc: 'Run specified dbt model'
+    summary: |
+      Usage:
+        - task {{.TASK}} -- my_model_name
+    silent: true
+    aliases: [r]
+    label: 'dbt:run-model-{{.MODEL}}'
+    vars:
+      MODEL: '{{.CLI_ARGS}}'
+      MODEL_DIR: '{{.MODEL_DIR}}'
+      _MODEL_PATH:
+        sh: >
+          {{if not .MODEL_DIR}}find {{.MODELS_DIR}} -name {{.MODEL}}.sql{{end}}
+      _MODEL_DIR:
+        sh: >
+          echo {{if ._MODEL_PATH}}{{osDir ._MODEL_PATH}}{{else}}{{.MODEL_DIR}}{{end}}
+    cmds:
+      - dbt run --select {{.MODEL}}
+    sources:
+      - '{{._MODEL_DIR}}/{{.MODEL}}.sql'
+    generates:
+      - target/compiled/**/{{._MODEL_DIR}}/{{.MODEL}}.sql
+      - target/run/**/{{._MODEL_DIR}}/{{.MODEL}}.sql
+    status:
+      - test -f target/compiled/**/{{._MODEL_DIR}}/{{.MODEL}}.sql
+      - test -f target/run/**/{{._MODEL_DIR}}/{{.MODEL}}.sql
+
+  generate-source-yaml:
+    desc: Generate a sources.yml file for tables in specified schema
+    summary: |
+      Usage:
+        - task {{.TASK}} SCHEMA=my_schema [OPTIONS]
+        - task {{.TASK}} SCHEMA=my_schema [OPTIONS] -- table_1 table_2 ...
+
+      Extra options:
+        - GENERATE_COLUMNS        ( default = false )  -  Whether you want to add the column names to your source definition
+        - INCLUDE_DESCRIPTIONS    ( default = false )  -  Whether you want to add description placeholders to your source definition
+        - TABLE_PATTERN           ( default = % )      -  A table prefix / postfix that you want to subselect from all available tables within a given schema
+        - EXCLUDE                 ( default = '' )     -  A string you want to exclude from the selection criteria
+    silent: true
+    aliases: [gsy]
+    vars:
+      SCHEMA: '{{.SCHEMA}}'
+      TABLE_NAMES: '{{.CLI_ARGS}}'
+      GENERATE_COLUMNS: '{{default "false" .GENERATE_COLUMNS}}'
+      INCLUDE_DESCRIPTIONS: '{{default "false" .INCLUDE_DESCRIPTIONS}}'
+      TABLE_PATTERN: '{{default "%" .TABLE_PATTERN}}'
+      EXCLUDE: '{{.EXCLUDE}}'
+    cmds:
+      - task: _check-if-variable
+        vars: { CALLER: '{{.TASK}}', VARNAME: SCHEMA, VARVALUE: '{{.SCHEMA}}' }
+      - echo {{.GENERATING_SOURCES_YAML}}
+      - task: _generate-source-yaml
+        vars:
+          SCHEMA: '{{.SCHEMA}}'
+          TABLE_NAMES: '{{.TABLE_NAMES}}'
+          GENERATE_COLUMNS: '{{.GENERATE_COLUMNS}}'
+          INCLUDE_DESCRIPTIONS: '{{.INCLUDE_DESCRIPTIONS}}'
+          TABLE_PATTERN: '{{.TABLE_PATTERN}}'
+          EXCLUDE: '{{.EXCLUDE}}'
+
+  generate-models-yaml:
+    desc: Generate a model.yaml for each name passed
+    summary: |
+      Usage:
+        - task {{.TASK}} [OPTIONS] -- model_1 model_2 ...
+
+      Extra options:
+        - UPSTREAM_DESCRIPTIONS   ( default = false )  -  Whether you want to include descriptions for identical column names from upstream models
+    silent: true
+    aliases: [gmy]
+    vars:
+      MODEL_NAMES: '{{.CLI_ARGS}}'
+      UPSTREAM_DESCRIPTIONS: '{{default "false" .UPSTREAM_DESCRIPTIONS}}'
+      _FIND_MODELS_OUTPUT: '{{.TEMP_DIR}}/model_paths'
+      _FILE_PATHS_OUTPUT: '{{.TEMP_DIR}}/file_paths'
+    cmds:
+      - task: _check-if-variable
+        vars: { CALLER: '{{.TASK}}', VARVALUE: '{{.MODEL_NAMES}}' }
+      - echo {{.GENERATING_MODELS_YAML}}
+      - task: _generate-models-yaml
+        vars:
+          MODEL_NAMES: '{{.MODEL_NAMES}}'
+          UPSTREAM_DESCRIPTIONS: '{{.UPSTREAM_DESCRIPTIONS}}'
+          FIND_MODELS_OUTPUT: '{{._FIND_MODELS_OUTPUT}}'
+          FILE_PATHS_OUTPUT: '{{._FILE_PATHS_OUTPUT}}'
+
+  _generate-models-yaml:
+    silent: true
+    internal: true
+    vars:
+      MODEL_NAMES: '{{.MODEL_NAMES}}'
+      UPSTREAM_DESCRIPTIONS: '{{.UPSTREAM_DESCRIPTIONS}}'
+      FIND_MODELS_OUTPUT: '{{.FIND_MODELS_OUTPUT}}'
+      FILE_PATHS_OUTPUT: '{{.FILE_PATHS_OUTPUT}}'
+    cmds:
+      - for: { var: MODEL_NAMES }
+        task: _find-model-path
+        vars: { FILE_NAME: '{{.ITEM}}', OUTPUT: '{{._FIND_MODELS_OUTPUT}}' }
+
+      - cat {{._FIND_MODELS_OUTPUT}} | grep {{shellQuote .FILE_NOT_FOUND}} || true
+      - cat {{._FIND_MODELS_OUTPUT}} | grep -v {{shellQuote .FILE_NOT_FOUND}} > {{.FILE_PATHS_OUTPUT}}
+      - |
+        output=$(cat {{.FILE_PATHS_OUTPUT}})
+        if [ -z "$output" ]; then
+          exit 1
+        fi
+      - task: _loop_model_files
+        vars: { FILE_PATHS_OUTPUT: '{{.FILE_PATHS_OUTPUT}}', UPSTREAM_DESCRIPTIONS: '{{.UPSTREAM_DESCRIPTIONS}}' }
+      - defer: { task: _cleanup }
+
+
+  generate-models-sql:
+    desc: Generate a base model.sql for each table name passed in a given source
+    summary: |
+      Usage:
+        - task {{.TASK}} SOURCE=my_raw_source [OPTIONS] -- table_1 table_2
+
+      Extra options:
+        - CASE_SENSITIVE_COLS   ( default = false )  -  Whether your source table has case sensitive column names
+        - MATERIALIZED          ( default = None )   -  Set materialization style (e.g. table, view, incremental) inside of the model's config block
+    silent: true
+    aliases: [gms]
+    vars:
+      SOURCE: '{{.SOURCE}}'
+      TABLES: '{{.CLI_ARGS}}'
+      CASE_SENSITIVE_COLS: '{{default "false" .CASE_SENSITIVE_COLS}}'
+      MATERIALIZED: '{{.MATERIALIZED}}'
+    cmds:
+      - task: _check-if-variable
+        vars: { CALLER: '{{.TASK}}', VARNAME: SOURCE, VARVALUE: '{{.SOURCE}}' }
+      - echo {{.GENERATING_MODELS_SQL}}
+      - for: { var: TABLES, as: TABLE }
+        task: _generate-model-sql
+        vars:
+          SOURCE: '{{.SOURCE}}'
+          TABLE: '{{.TABLE}}'
+          CASE_SENSITIVE_COLS: '{{.CASE_SENSITIVE_COLS}}'
+          MATERIALIZED: '{{.MATERIALIZED}}'
+
+  _generate-model-sql:
+    internal: true
+    silent: false
+    vars:
+      SOURCE: '{{.SOURCE}}'
+      TABLE: '{{.TABLE}}'
+      CASE_SENSITIVE_COLS: '{{.CASE_SENSITIVE_COLS}}'
+      MATERIALIZED: '{{.MATERIALIZED}}'
+      _SOURCE_PATH:
+        sh: >
+          find {{.MODELS_DIR}} -name __{{.SOURCE}}__{{.SOURCES_FILE}}
+      _DIR:
+        sh: >
+          echo {{if ._SOURCE_PATH}}{{osDir ._SOURCE_PATH}}{{else}}{{.MODEL_DIR}}{{end}}
+      _FILE_NAME: '{{.BASE_LAYER}}_{{.SOURCE}}__{{.TABLE}}.sql'
+      _ARGS: >
+        {
+          source_name: {{.SOURCE}},
+          table_name: {{.TABLE}},
+          case_sensitive_cols: {{.CASE_SENSITIVE_COLS}}
+          {{if .MATERIALIZED}} materialized: {{.MATERIALIZED}}{{end}}
+        }
+    cmds:
+      - task: _run-dbt-operation
+        vars: { OP: generate_base_model, ARGS: '{{._ARGS}}', DBT_OUTPUT_NAME: '{{._FILE_NAME}}' }
+      - defer: { task: _cleanup }
+      - task: _check-if-error
+        vars: { OUTPUT_NAME: '{{._FILE_NAME}}', ERR_MSG: '{{.DBT_ERROR}}' }
+      - task: _clean-output-and-write-to-file
+        vars:
+          DIR: '{{._DIR}}'
+          FILE_NAME: '{{._FILE_NAME}}'
+          OUTPUT_NAME: '{{._FILE_NAME}}'
+          IS_YAML: false
+      - task: _file-created-msg
+        vars: { FILE_NAME: '{{._FILE_NAME}}', DIR: '{{._DIR}}'}
+
+  _loop_model_files:
+    internal: true
+    silent: true
+    vars:
+      FILE_PATHS_OUTPUT: '{{.FILE_PATHS_OUTPUT}}'
+      UPSTREAM_DESCRIPTIONS: '{{.UPSTREAM_DESCRIPTIONS}}'
+      _FILE_PATHS:
+        sh: cat {{.FILE_PATHS_OUTPUT}}
+    cmds:
+      - for: { var: _FILE_PATHS, as: FILE }
+        task: _generate-model-yaml
+        vars: { MODEL_FILE: '{{.FILE}}', UPSTREAM_DESCRIPTIONS: '{{.UPSTREAM_DESCRIPTIONS}}'}
+
+  _generate-model-yaml:
+    internal: true
+    silent: true
+    vars:
+      MODEL_FILE: '{{.MODEL_FILE}}'
+      UPSTREAM_DESCRIPTIONS: '{{.UPSTREAM_DESCRIPTIONS}}'
+      _DIR: '{{osDir .MODEL_FILE}}'
+      _BASE: '{{osBase .MODEL_FILE}}'
+      _MODEL_NAME: '{{._BASE | replace ".sql" ""}}'
+      _FILE_NAME: '{{ printf "_%s%s" ._MODEL_NAME ".yml"}}'
+      _ARGS: >
+        {
+          model_names: [{{._MODEL_NAME}}],
+          upstream_descriptions: {{.UPSTREAM_DESCRIPTIONS}}
+        }
+    # seems like model only needs to be compiled instead of ran to have proper
+    # column names. change the precondition
+    preconditions:
+      - task run-model MODEL_DIR={{._DIR}} -- {{._MODEL_NAME}}
+    cmds:
+      - task: _run-dbt-operation
+        vars: { OP: generate_model_yaml, ARGS: '{{._ARGS}}', DBT_OUTPUT_NAME: '{{._MODEL_NAME}}'}
+      - defer: { task: _cleanup }
+      - task: _check-if-error
+        vars: { OUTPUT_NAME: '{{._MODEL_NAME}}', ERR_MSG: '{{.DBT_ERROR}}' }
+      - task: _clean-output-and-write-to-file
+        vars:
+          DIR: '{{._DIR}}'
+          FILE_NAME: '{{._FILE_NAME}}'
+          OUTPUT_NAME: '{{._MODEL_NAME}}'
+          IS_YAML: true
+      - task: _file-created-msg
+        vars: { FILE_NAME: '{{._FILE_NAME}}', DIR: '{{._DIR}}' }
+
+  _generate-source-yaml:
+    internal: true
+    silent: true
+    vars:
+      SCHEMA: '{{.SCHEMA}}'
+      TABLE_NAMES: '{{.TABLE_NAMES}}'
+      GENERATE_COLUMNS: '{{.GENERATE_COLUMNS}}'
+      INCLUDE_DESCRIPTIONS: '{{.INCLUDE_DESCRIPTIONS}}'
+      TABLE_PATTERN: '{{.TABLE_PATTERN}}'
+      EXCLUDE: '{{.EXCLUDE}}'
+      _DIR: '{{.BASE_DIR}}/{{.SCHEMA}}'
+      _PARSED_TABLE_NAMES: '{{if .TABLE_NAMES}}{{.TABLE_NAMES | splitList " " | toJson}}{{end}}'
+      _FILE_NAME: '__{{.SCHEMA}}__{{.SOURCES_FILE}}'
+      _ARGS: >
+        {
+          schema_name: {{.SCHEMA}},
+          generate_columns: {{.GENERATE_COLUMNS}},
+          include_descriptions: {{.INCLUDE_DESCRIPTIONS}},
+          table_pattern: "{{.TABLE_PATTERN}}",
+          exclude: "{{.EXCLUDE}}",
+          {{if ._PARSED_TABLE_NAMES}} table_names: {{._PARSED_TABLE_NAMES}}{{end}}
+        }
+    cmds:
+      - task: _run-dbt-operation
+        vars: { OP: generate_source, ARGS: '{{._ARGS}}', DBT_OUTPUT_NAME: '{{._FILE_NAME}}'}
+      - defer: { task: _cleanup }
+      - task: _check-if-error
+        vars: { OUTPUT_NAME: '{{._FILE_NAME}}', ERR_MSG: '{{.DBT_ERROR}}' }
+      - task: _clean-output-and-write-to-file
+        vars:
+          DIR: '{{._DIR}}'
+          FILE_NAME: '{{._FILE_NAME}}'
+          OUTPUT_NAME: '{{._FILE_NAME}}'
+          IS_YAML: true
+      - task: _file-created-msg
+        vars: { FILE_NAME: '{{._FILE_NAME}}', DIR: '{{._DIR}}' }
+
+  _check-if-variable:
+    internal: true
+    silent: true
+    vars:
+      CALLER: '{{.CALLER}}'
+      VARNAME: '{{.VARNAME}}'
+      VARVALUE: '{{.VARVALUE}}'
+      _NO_ARGS_TEMPLATE: '{{shellQuote .MISSING_ARGS_WARNING}}'
+      _NO_VARS_TEMPLATE: '{{shellQuote .MISSING_VAR_WARNING}}'
+      _NO_ARGS_MSG: '{{printf ._NO_ARGS_TEMPLATE .CALLER}}'
+      _NO_VAR_MSG: '{{printf ._NO_VARS_TEMPLATE .VARNAME .CALLER .VARNAME}}'
+    cmds:
+      - |
+        {{if and (not .VARNAME) (not .VARVALUE)}} printf {{._NO_ARGS_MSG}} && exit 1
+        {{else if not .VARVALUE}} printf {{._NO_VAR_MSG}} && exit 1 {{end}}
+
+  _check-if-error:
+    internal: true
+    silent: true
+    vars:
+      OUTPUT_NAME: '{{.OUTPUT_NAME}}'
+      ERR_MSG: '{{.ERR_MSG}}'
+      _OUTPUT_PATH: '{{.TEMP_DIR}}/{{.OUTPUT_NAME}}'
+    cmds:
+      - >
+        cat {{._OUTPUT_PATH}}
+        | grep '{{.ERR_MSG}}' > /dev/null && cat {{._OUTPUT_PATH}} && exit 1
+        || true
+
+  _clean-output-and-write-to-file:
+    internal: true
+    silent: true
+    vars:
+      DIR: '{{default .MODELS_DIR .DIR}}'
+      FILE_NAME: '{{.FILE_NAME}}'
+      OUTPUT_NAME: '{{.OUTPUT_NAME}}'
+      IS_YAML: '{{.IS_YAML | toString}}'
+      _OUTPUT_PATH: '{{.TEMP_DIR}}/{{.OUTPUT_NAME}}'
+      _REPLACE_TOKEN: '{{if eq .IS_YAML "true"}}version{{else}}with source{{end}}'
+    cmds:
+      - mkdir -p {{.DIR}}
+      - touch {{.DIR}}/{{.FILE_NAME}}
+      - >
+        cat {{._OUTPUT_PATH}}
+        | sed '/{{._REPLACE_TOKEN}}/,$!d'
+        | sed '0,/^.*{{._REPLACE_TOKEN}}/s//{{._REPLACE_TOKEN}}/' > {{.DIR}}/{{.FILE_NAME}}
+
+  _file-created-msg:
+    internal: true
+    silent: true
+    vars:
+      FILE_NAME: '{{.FILE_NAME}}'
+      DIR: '{{.DIR}}'
+      _MSG_TEMPLATE: '{{shellQuote .FILE_CREATED_MSG}}'
+      _MSG: '{{printf ._MSG_TEMPLATE .FILE_NAME .DIR}}'
+    cmds:
+      - echo -e {{._MSG}}
+
+  _find-model-path:
+    internal: true
+    silent: true
+    vars:
+      FILE_NAME: '{{.FILE_NAME}}'
+      OUTPUT: '{{.OUTPUT}}'
+      _MSG_TEMPLATE: '{{shellQuote .FILE_NOT_FOUND_ERROR}}'
+      _MSG: '{{printf ._MSG_TEMPLATE .FILE_NAME}}'
+      _FILE_DIR:
+        sh: |
+          find {{.MODELS_DIR}} -name *{{.FILE_NAME}}.sql
+    cmds:
+      - mkdir -p {{.TEMP_DIR}}
+      - >
+        {{if ._FILE_DIR}}echo {{._FILE_DIR}}{{else}}echo -e {{._MSG}}{{end}} >> {{.OUTPUT}}
+
+  _run-dbt-operation:
+    internal: true
+    silent: true
+    vars:
+      OP: '{{.OP}}'
+      ARGS: '{{shellQuote .ARGS}}'
+      DBT_OUTPUT_NAME: '{{.DBT_OUTPUT_NAME}}'
+    cmds:
+      - mkdir -p {{.TEMP_DIR}}
+      - echo "$(dbt run-operation {{.OP}} --args {{.ARGS}} || echo {{.DBT_ERROR}})" > {{.TEMP_DIR}}/{{.DBT_OUTPUT_NAME}}
+
+  _cleanup:
+    internal: true
+    silent: true
+    cmds:
+      - rm {{.TEMP_DIR}} -rf
+
+  _get-dbt-root:
+    internal: true
+    silent: true
+    cmds:
+      - echo $(dirname $(dbt debug | grep 'Using dbt_project.yml' | cut -d\  -f5)) || echo Not in a dbt project

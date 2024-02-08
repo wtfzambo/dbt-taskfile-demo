@@ -20,12 +20,7 @@
     }
   },
 
-  // "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/workspace,type=bind",
-  // "workspaceFolder": "/home/vscode/workspace",
-  // "mounts": [
-  // 	"source=${localWorkspaceFolderBasename}-.venv,target=${containerWorkspaceFolder}/.venv,type=volume"
-  // ],
-
+  "postCreateCommand": "bash ./.devcontainer/post-create.sh",
   "postStartCommand": "bash ./.devcontainer/post-start.sh",
   "waitFor": "postStartCommand",
 
@@ -50,12 +45,9 @@
 					}
 				},
         "python.defaultInterpreterPath": "./.venv/bin/python",
-        "python.terminal.activateEnvironment": false,
+        "python.terminal.activateEnvironment": true,
         "python.interpreter.infoVisibility": "always",
-        "python.languageServer": "Default",
-        "python.analysis.typeCheckingMode": "off",
         "workbench.iconTheme": "vscode-icons",
-        "task": { "checkForUpdates": false },
         "yaml.schemas": {
           "https://raw.githubusercontent.com/dbt-labs/dbt-jsonschema/main/schemas/dbt_yml_files.json": [
             "/**/*.yml",
@@ -63,6 +55,7 @@
             "!profiles.*.yml",
             "!dbt_project.yml",
             "!packages.yml",
+            "!package-lock.yml",
             "!selectors.yml",
             "!profile_template.yml",
             "!Task*.{yaml,yml}",
@@ -78,15 +71,16 @@
             "packages.yml"
           ]
         },
+        "files.associations": {
+          "*.sql": "jinja-sql",
+          "*.session.sql": "sql"
+        },
+        "[jinja-sql]": {
+          "editor.defaultFormatter": "innoverio.vscode-dbt-power-user",
+          "editor.formatOnSave": false,
+          "editor.snippetSuggestions": "bottom"
+        },
         "vsicons.associations.files": [
-          {
-            "icon": "taskfile",
-            "extensions": [],
-            "format": "svg",
-            "filename": true,
-            "filenamesGlob": ["Taskfile", "Taskfile.dist"],
-            "extensionsGlob": ["yml", "yaml"]
-          },
           {
             "icon": "db",
             "extends": "db",

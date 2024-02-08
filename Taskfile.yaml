@@ -1,0 +1,25 @@
+version: 3
+
+includes:
+  dbt:
+    taskfile: ./dbt
+    dir: ./dbt
+
+tasks:
+  default:
+    internal: false
+    silent: true
+    cmds:
+      - 'echo -e "\n👋 Welcome to Task! To see available commands, run: task -l"'
+      - 'echo -e "📝 To see instructions for a specific command run: task command-name --summary\n"'
+      - task -l
+
+  reset-db:
+    desc: Resets Duckdb database to default state
+    internal: false
+    silent: true
+    aliases: [rd]
+    cmds:
+      - echo "Resetting Duckdb database to default state"
+      - test -f ./assets/demo.duckdb && rm ./assets/demo.duckdb || true
+      - duckdb ./assets/demo.duckdb < ./.devcontainer/make_tables.sql
