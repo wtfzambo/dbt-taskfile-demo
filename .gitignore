@@ -161,3 +161,6 @@ cython_debug/
 
 # project specific stuff
 *.duckdb
+*.duckdb.wal
+.vscode/
+.task/

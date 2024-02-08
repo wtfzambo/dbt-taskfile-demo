@@ -4,3 +4,6 @@ demo:
     local:
       type: duckdb
       path: ../assets/demo.duckdb
+      database: demo
+      schema: dbt
+      

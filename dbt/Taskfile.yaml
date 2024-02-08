@@ -149,10 +149,9 @@ tasks:
     cmds:
       - for: { var: MODEL_NAMES }
         task: _find-model-path
-        vars: { FILE_NAME: '{{.ITEM}}', OUTPUT: '{{._FIND_MODELS_OUTPUT}}' }
-
-      - cat {{._FIND_MODELS_OUTPUT}} | grep {{shellQuote .FILE_NOT_FOUND}} || true
-      - cat {{._FIND_MODELS_OUTPUT}} | grep -v {{shellQuote .FILE_NOT_FOUND}} > {{.FILE_PATHS_OUTPUT}}
+        vars: { FILE_NAME: '{{.ITEM}}', OUTPUT: '{{.FIND_MODELS_OUTPUT}}' }
+      - cat {{.FIND_MODELS_OUTPUT}} | grep {{shellQuote .FILE_NOT_FOUND}} || true
+      - cat {{.FIND_MODELS_OUTPUT}} | grep -v {{shellQuote .FILE_NOT_FOUND}} > {{.FILE_PATHS_OUTPUT}}
       - |
         output=$(cat {{.FILE_PATHS_OUTPUT}})
         if [ -z "$output" ]; then
