@@ -40,6 +40,8 @@ env:
   FILE_NOT_FOUND: ❌ No file matching
   FILE_NOT_FOUND_ERROR: >
     {{.FILE_NOT_FOUND}} {{.YELLOW}}*%s.sql{{.NC}} found under {{.MODELS_DIR}}
+  AMBIGUOUS_FILENAME_ERROR: >
+    ❓ Too many files found with suffix {{.YELLOW}}`%s`{{.NC}} under directory {{.BLUE}}{{.MODELS_DIR}}{{.NC}}. Be more specific.
   DBT_ERROR: ❌ Error encountered while running dbt operation
 
 tasks:
@@ -61,6 +63,7 @@ tasks:
     vars:
       MODEL: '{{.CLI_ARGS}}'
       MODEL_DIR: '{{.MODEL_DIR}}'
+      UPSTREAM: '{{default "false" .UPSTREAM}}'
       _MODEL_PATH:
         sh: >
           {{if not .MODEL_DIR}}find {{.MODELS_DIR}} -name {{.MODEL}}.sql{{end}}
@@ -68,7 +71,7 @@ tasks:
         sh: >
           echo {{if ._MODEL_PATH}}{{osDir ._MODEL_PATH}}{{else}}{{.MODEL_DIR}}{{end}}
     cmds:
-      - dbt run --select {{.MODEL}}
+      - dbt run --select {{if eq .UPSTREAM "true"}}+{{end}}{{.MODEL}}
     sources:
       - '{{._MODEL_DIR}}/{{.MODEL}}.sql'
     generates:
@@ -258,7 +261,7 @@ tasks:
     # seems like model only needs to be compiled instead of ran to have proper
     # column names. change the precondition
     preconditions:
-      - task run-model MODEL_DIR={{._DIR}} -- {{._MODEL_NAME}}
+      - task run-model MODEL_DIR={{._DIR}} UPSTREAM=true -- {{._MODEL_NAME}}
     cmds:
       - task: _run-dbt-operation
         vars: { OP: generate_model_yaml, ARGS: '{{._ARGS}}', DBT_OUTPUT_NAME: '{{._MODEL_NAME}}'}
@@ -377,10 +380,14 @@ tasks:
       OUTPUT: '{{.OUTPUT}}'
       _MSG_TEMPLATE: '{{shellQuote .FILE_NOT_FOUND_ERROR}}'
       _MSG: '{{printf ._MSG_TEMPLATE .FILE_NAME}}'
+      _MSG_AMBIGUOUS: '{{shellQuote (printf .AMBIGUOUS_FILENAME_ERROR .FILE_NAME)}}'
       _FILE_DIR:
         sh: |
           find {{.MODELS_DIR}} -name *{{.FILE_NAME}}.sql
+      _LEN_MATCHES: '{{._FILE_DIR | splitLines | len}}'
     cmds:
+      - |
+        {{if gt (._LEN_MATCHES | int) 1}} printf {{._MSG_AMBIGUOUS}} && exit 1 {{end}}
       - mkdir -p {{.TEMP_DIR}}
       - >
         {{if ._FILE_DIR}}echo {{._FILE_DIR}}{{else}}echo -e {{._MSG}}{{end}} >> {{.OUTPUT}}
