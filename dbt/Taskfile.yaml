@@ -242,6 +242,7 @@ tasks:
       - for: { var: _FILE_PATHS, as: FILE }
         task: _generate-model-yaml
         vars: { MODEL_FILE: '{{.FILE}}', UPSTREAM_DESCRIPTIONS: '{{.UPSTREAM_DESCRIPTIONS}}'}
+      - defer: { task: _cleanup }
 
   _generate-model-yaml:
     internal: true

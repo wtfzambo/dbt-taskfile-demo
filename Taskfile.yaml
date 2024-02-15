@@ -23,3 +23,4 @@ tasks:
       - echo "Resetting Duckdb database to default state"
       - test -f ./assets/demo.duckdb && rm ./assets/demo.duckdb || true
       - duckdb ./assets/demo.duckdb < ./.devcontainer/make_tables.sql
+      - test -d ./dbt/.task && rm -rf ./dbt/.task || true
